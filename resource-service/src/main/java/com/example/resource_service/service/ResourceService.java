@@ -17,7 +17,7 @@ import org.springframework.web.client.RestTemplate;
 
 import java.io.ByteArrayInputStream;
 import java.io.InputStream;
-import java.util.Arrays;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.stream.Collectors;
 
@@ -45,7 +45,7 @@ public class ResourceService {
         }
 
         String durationStr = metadata.get("xmpDM:duration");
-        String formattedDuration = "00:00";
+        String formattedDuration = null;
         if (durationStr != null) {
             try {
                 long ms = (long) Double.parseDouble(durationStr);
@@ -57,16 +57,11 @@ public class ResourceService {
         }
 
         String releaseDate = metadata.get("xmpDM:releaseDate");
-        String year = (releaseDate != null && releaseDate.length() >= 4) ? releaseDate.substring(0, 4) : "2024";
+        String year = (releaseDate != null && releaseDate.length() >= 4) ? releaseDate.substring(0, 4) : releaseDate;
 
         String name = metadata.get("dc:title") != null ? metadata.get("dc:title") : metadata.get("title");
-        if (name == null || name.trim().isEmpty()) name = "Unknown Title";
-
         String artist = metadata.get("xmpDM:artist");
-        if (artist == null || artist.trim().isEmpty()) artist = "Unknown Artist";
-
         String album = metadata.get("xmpDM:album");
-        if (album == null || album.trim().isEmpty()) album = "Unknown Album";
 
         SongMetadataDto songDto = SongMetadataDto.builder()
                 .id(resource.getId())
@@ -100,7 +95,7 @@ public class ResourceService {
             throw new IllegalArgumentException("CSV string is too long: received " + csvIds.length() + " characters, max allowed is 200.");
         }
 
-        List<Integer> ids = new java.util.ArrayList<>();
+        List<Integer> ids = new ArrayList<>();
         if (csvIds != null && !csvIds.isEmpty()) {
             for (String idStr : csvIds.split(",")) {
                 idStr = idStr.trim();
@@ -115,11 +110,14 @@ public class ResourceService {
         List<Integer> deletedIds = ids.stream()
                 .filter(resourceRepository::existsById)
                 .peek(resourceRepository::deleteById)
-                .collect(java.util.stream.Collectors.toList());
+                .collect(Collectors.toList());
 
         if (!deletedIds.isEmpty()) {
+            String actuallyDeletedCsv = deletedIds.stream()
+                    .map(String::valueOf)
+                    .collect(Collectors.joining(","));
             try {
-                restTemplate.delete(songServiceUrl + "?id=" + csvIds);
+                restTemplate.delete(songServiceUrl + "?id=" + actuallyDeletedCsv);
             } catch (Exception ignored) {}
         }
 

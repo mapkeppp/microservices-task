@@ -5,7 +5,6 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
-import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
 import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.web.HttpMediaTypeNotSupportedException;
 
@@ -44,15 +43,26 @@ public class GlobalExceptionHandler {
         String invalidValue = ex.getValue() != null ? ex.getValue().toString() : "unknown";
 
         ErrorResponse response = ErrorResponse.builder()
-                .errorMessage("Invalid ID format: '" + invalidValue + "'. Only positive integers are allowed.")
+                .errorMessage("Invalid value '" + invalidValue + "' for ID. Must be a positive integer.")
                 .errorCode("400")
                 .build();
         return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(response);
     }
-    @ExceptionHandler({HttpMessageNotReadableException.class, HttpMediaTypeNotSupportedException.class})
-    public ResponseEntity<ErrorResponse> handleBadRequest(Exception ex) {
+
+    @ExceptionHandler(HttpMediaTypeNotSupportedException.class)
+    public ResponseEntity<ErrorResponse> handleMediaTypeNotSupported(HttpMediaTypeNotSupportedException ex) {
+        String contentType = ex.getContentType() != null ? ex.getContentType().toString() : "unknown";
         ErrorResponse response = ErrorResponse.builder()
-                .errorMessage("Invalid request: missing body or wrong media type")
+                .errorMessage("Invalid file format: " + contentType + ". Only MP3 files are allowed.")
+                .errorCode("400")
+                .build();
+        return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(response);
+    }
+
+    @ExceptionHandler(HttpMessageNotReadableException.class)
+    public ResponseEntity<ErrorResponse> handleMessageNotReadable(HttpMessageNotReadableException ex) {
+        ErrorResponse response = ErrorResponse.builder()
+                .errorMessage("Invalid request body")
                 .errorCode("400")
                 .build();
         return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(response);
@@ -68,5 +78,4 @@ public class GlobalExceptionHandler {
                 .build();
         return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(response);
     }
-
 }
