@@ -82,8 +82,9 @@ public class ResourceService {
 
     public byte[] getResourceById(Integer id) {
         if (id <= 0) {
-            throw new IllegalArgumentException("Invalid value '" + id + "' for ID. Must be a positive integer.");
-        }
+            throw new IllegalArgumentException(
+                    "Invalid value '" + id + "' for ID. Must be a positive integer"
+            );        }
 
         Resource resource = resourceRepository.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException("Resource with ID=" + id + " not found"));
@@ -92,17 +93,28 @@ public class ResourceService {
 
     public List<Integer> deleteResources(String csvIds) {
         if (csvIds != null && csvIds.length() > 200) {
-            throw new IllegalArgumentException("CSV string is too long: received " + csvIds.length() + " characters, max allowed is 200.");
-        }
+            throw new IllegalArgumentException(
+                    "CSV string is too long: received " + csvIds.length() + " characters, maximum allowed is 200"
+            );        }
 
         List<Integer> ids = new ArrayList<>();
         if (csvIds != null && !csvIds.isEmpty()) {
             for (String idStr : csvIds.split(",")) {
                 idStr = idStr.trim();
                 try {
-                    ids.add(Integer.parseInt(idStr));
+                    int id = Integer.parseInt(idStr);
+
+                    if (id <= 0) {
+                        throw new IllegalArgumentException(
+                                "Invalid ID format: '" + idStr + "'. Only positive integers are allowed"
+                        );
+                    }
+
+                    ids.add(id);
                 } catch (NumberFormatException e) {
-                    throw new IllegalArgumentException("Invalid ID format: '" + idStr + "'. Only positive integers are allowed.");
+                    throw new IllegalArgumentException(
+                            "Invalid ID format: '" + idStr + "'. Only positive integers are allowed"
+                    );
                 }
             }
         }

@@ -53,7 +53,7 @@ public class GlobalExceptionHandler {
         String invalidValue = ex.getValue() != null ? ex.getValue().toString() : "unknown";
 
         ErrorResponse response = ErrorResponse.builder()
-                .errorMessage("Invalid value '" + invalidValue + "' for ID. Must be a positive integer.")
+                .errorMessage("Invalid value '" + invalidValue + "' for ID. Must be a positive integer")
                 .errorCode("400")
                 .build();
         return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(response);

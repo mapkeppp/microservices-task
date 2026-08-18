@@ -43,7 +43,7 @@ public class GlobalExceptionHandler {
         String invalidValue = ex.getValue() != null ? ex.getValue().toString() : "unknown";
 
         ErrorResponse response = ErrorResponse.builder()
-                .errorMessage("Invalid value '" + invalidValue + "' for ID. Must be a positive integer.")
+                .errorMessage("Invalid value '" + invalidValue + "' for ID. Must be a positive integer")
                 .errorCode("400")
                 .build();
         return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(response);
@@ -51,11 +51,15 @@ public class GlobalExceptionHandler {
 
     @ExceptionHandler(HttpMediaTypeNotSupportedException.class)
     public ResponseEntity<ErrorResponse> handleMediaTypeNotSupported(HttpMediaTypeNotSupportedException ex) {
-        String contentType = ex.getContentType() != null ? ex.getContentType().toString() : "unknown";
+        String contentType = ex.getContentType() != null
+                ? ex.getContentType().getType() + "/" + ex.getContentType().getSubtype()
+                : "unknown";
+
         ErrorResponse response = ErrorResponse.builder()
-                .errorMessage("Invalid file format: " + contentType + ". Only MP3 files are allowed.")
+                .errorMessage("Invalid file format: " + contentType + ". Only MP3 files are allowed")
                 .errorCode("400")
                 .build();
+
         return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(response);
     }
 

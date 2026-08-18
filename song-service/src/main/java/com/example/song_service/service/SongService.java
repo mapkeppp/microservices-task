@@ -8,9 +8,8 @@ import com.example.song_service.repository.SongRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 
-import java.util.Arrays;
 import java.util.List;
-import java.util.stream.Collectors;
+
 
 @Service
 @RequiredArgsConstructor
@@ -20,7 +19,9 @@ public class SongService {
 
     public Integer createSong(SongDto songDTO) {
         if (songRepository.existsById(songDTO.getId())) {
-            throw new SongAlreadyExistsException("Song metadata with ID " + songDTO.getId() + " already exists");
+            throw new SongAlreadyExistsException(
+                    "Metadata for resource ID=" + songDTO.getId() + " already exists"
+            );
         }
 
         Song song = new Song();
@@ -36,11 +37,15 @@ public class SongService {
 
     public SongDto getSongById(Integer id) {
         if (id <= 0) {
-            throw new IllegalArgumentException("Invalid value '" + id + "' for ID. Must be a positive integer.");
+            throw new IllegalArgumentException(
+                    "Invalid value '" + id + "' for ID. Must be a positive integer"
+            );
         }
 
         Song song = songRepository.findById(id)
-                .orElseThrow(() -> new SongNotFoundException("Song metadata with ID " + id + " not found"));
+                .orElseThrow(() -> new SongNotFoundException(
+                        "Song metadata for ID=" + id + " not found"
+                ));
 
         SongDto dto = new SongDto();
         dto.setId(song.getId());
@@ -55,17 +60,34 @@ public class SongService {
 
     public List<Integer> deleteSongs(String csvIds) {
         if (csvIds != null && csvIds.length() > 200) {
-            throw new IllegalArgumentException("CSV string is too long: received " + csvIds.length() + " characters, max allowed is 200.");
+            throw new IllegalArgumentException(
+                    "CSV string is too long: received " + csvIds.length()
+                            + " characters, maximum allowed is 200"
+            );
         }
 
         List<Integer> ids = new java.util.ArrayList<>();
+
         if (csvIds != null && !csvIds.isEmpty()) {
             for (String idStr : csvIds.split(",")) {
                 idStr = idStr.trim();
+
                 try {
-                    ids.add(Integer.parseInt(idStr));
+                    int id = Integer.parseInt(idStr);
+
+                    if (id <= 0) {
+                        throw new IllegalArgumentException(
+                                "Invalid ID format: '" + idStr
+                                        + "'. Only positive integers are allowed"
+                        );
+                    }
+
+                    ids.add(id);
                 } catch (NumberFormatException e) {
-                    throw new IllegalArgumentException("Invalid ID format: '" + idStr + "'. Only positive integers are allowed.");
+                    throw new IllegalArgumentException(
+                            "Invalid ID format: '" + idStr
+                                    + "'. Only positive integers are allowed"
+                    );
                 }
             }
         }
