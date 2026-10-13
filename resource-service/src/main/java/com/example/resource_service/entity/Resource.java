@@ -14,5 +14,6 @@ public class Resource {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Integer id;
 
-    private byte[] audioData;
+    @Column(name = "s3_key")
+    private String s3Key;
 }

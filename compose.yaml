@@ -33,7 +33,7 @@ services:
     build:
       context: ./song-service
     ports:
-      - "8081"
+      - "8081:8081"
     environment:
       SERVER_PORT: 8081
       SPRING_DATASOURCE_URL: ${SONG_DB_URL}
@@ -56,7 +56,25 @@ services:
       SPRING_DATASOURCE_PASSWORD: ${RESOURCE_DB_PASSWORD}
       EUREKA_SERVER_URL: ${EUREKA_SERVER_URL}
       SONG_SERVICE_URL: ${SONG_SERVICE_URL}
+      AWS_S3_ENDPOINT: http://s3mock:9090
     depends_on:
       - resource-db
       - eureka-server
       - song-service
+      - s3mock
+
+  s3mock:
+    image: adobe/s3mock:latest
+    container_name: s3mock
+    ports:
+      - "9090:9090"
+    environment:
+      initialBuckets: resources-bucket
+
+  resource-processor:
+    build:
+      context: ./resource-processor
+    ports:
+      - "8082:8082"
+    environment:
+      SERVER_PORT: 8082
