@@ -29,6 +29,15 @@ services:
     volumes:
       - ./init-scripts/song-db/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
 
+  rabbitmq:
+    image: rabbitmq:3-management
+    ports:
+      - "5672:5672"
+      - "15672:15672"
+    environment:
+      RABBITMQ_DEFAULT_USER: guest
+      RABBITMQ_DEFAULT_PASSWORD: guest
+
   song-service:
     build:
       context: ./song-service
@@ -57,11 +66,13 @@ services:
       EUREKA_SERVER_URL: ${EUREKA_SERVER_URL}
       SONG_SERVICE_URL: ${SONG_SERVICE_URL}
       AWS_S3_ENDPOINT: http://s3mock:9090
+      RABBITMQ_HOST: rabbitmq
     depends_on:
       - resource-db
       - eureka-server
       - song-service
       - s3mock
+      - rabbitmq
 
   s3mock:
     image: adobe/s3mock:latest
@@ -78,3 +89,10 @@ services:
       - "8082:8082"
     environment:
       SERVER_PORT: 8082
+      RABBITMQ_HOST: rabbitmq
+      RESOURCE_SERVICE_URL: http://resource-service:8080
+      SONG_SERVICE_URL: http://song-service:8081
+    depends_on:
+      - rabbitmq
+      - resource-service
+      - song-service

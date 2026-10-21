@@ -1,9 +1,11 @@
 package com.example.resource_service.service;
 
+import com.example.resource_service.config.RabbitMQConfig;
 import com.example.resource_service.entity.Resource;
 import com.example.resource_service.exception.ResourceNotFoundException;
 import com.example.resource_service.repository.ResourceRepository;
 import lombok.RequiredArgsConstructor;
+import org.springframework.amqp.rabbit.core.RabbitTemplate;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -26,6 +28,7 @@ public class ResourceService {
     private final ResourceRepository resourceRepository;
     private final RestTemplate restTemplate;
     private final S3Client s3Client;
+    private final RabbitTemplate rabbitTemplate;
 
     @Value("${song.service.url:http://song-service/songs}")
     private String songServiceUrl;
@@ -46,6 +49,9 @@ public class ResourceService {
         Resource resource = new Resource();
         resource.setS3Key(s3Key);
         resource = resourceRepository.save(resource);
+
+        // Отправляем сообщение в очередь
+        rabbitTemplate.convertAndSend(RabbitMQConfig.QUEUE_NAME, resource.getId());
 
         return resource.getId();
     }
@@ -107,7 +113,6 @@ public class ResourceService {
                 } catch (Exception ignored) {
                 }
 
-                // 2. Удаляем запись из базы данных Resource
                 resourceRepository.deleteById(id);
                 deletedIds.add(id);
             });
