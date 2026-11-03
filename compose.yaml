@@ -2,13 +2,23 @@ services:
   eureka-server:
     build:
       context: ./eureka-server
+      dockerfile: Dockerfile
+    container_name: eureka_server
     ports:
       - "${EUREKA_SERVER_PORT}:8761"
     environment:
       SERVER_PORT: 8761
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8761/"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - microservices-network
 
   resource-db:
     image: postgres:17-alpine
+    container_name: resource_db
     environment:
       POSTGRES_DB: ${RESOURCE_DB_NAME}
       POSTGRES_USER: ${RESOURCE_DB_USER}
@@ -16,10 +26,19 @@ services:
     ports:
       - "${RESOURCE_DB_PORT}:5432"
     volumes:
-      - ./init-scripts/resource-db/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+      - ./init-scripts/resource-db:/docker-entrypoint-initdb.d:ro
+      - resource_db_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${RESOURCE_DB_USER}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - microservices-network
 
   song-db:
     image: postgres:17-alpine
+    container_name: song_db
     environment:
       POSTGRES_DB: ${SONG_DB_NAME}
       POSTGRES_USER: ${SONG_DB_USER}
@@ -27,72 +46,152 @@ services:
     ports:
       - "${SONG_DB_PORT}:5432"
     volumes:
-      - ./init-scripts/song-db/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+      - ./init-scripts/song-db:/docker-entrypoint-initdb.d:ro
+      - song_db_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${SONG_DB_USER}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - microservices-network
 
   rabbitmq:
-    image: rabbitmq:3-management
+    image: rabbitmq:3-management-alpine
+    container_name: rabbitmq_broker
     ports:
-      - "5672:5672"
-      - "15672:15672"
+      - "${RABBITMQ_PORT}:5672"
+      - "${RABBITMQ_MANAGEMENT_PORT}:15672"
     environment:
-      RABBITMQ_DEFAULT_USER: guest
-      RABBITMQ_DEFAULT_PASS: guest
+      RABBITMQ_DEFAULT_USER: ${RABBITMQ_USER}
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASSWORD}
+    volumes:
+      - rabbitmq_data:/var/lib/rabbitmq
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - microservices-network
+
+  s3mock:
+    image: adobe/s3mock:latest
+    container_name: s3mock_service
+    ports:
+      - "${S3_PORT}:9090"
+    environment:
+      initialBuckets: resources-bucket
+    networks:
+      - microservices-network
 
   song-service:
     build:
       context: ./song-service
+      dockerfile: Dockerfile
+    container_name: song_service
     ports:
-      - "8081:8081"
+      - "${SONG_SERVICE_PORT}:8081"
     environment:
       SERVER_PORT: 8081
-      SPRING_DATASOURCE_URL: ${SONG_DB_URL}
+      SPRING_DATASOURCE_URL: jdbc:postgresql://song-db:5432/${SONG_DB_NAME}
       SPRING_DATASOURCE_USERNAME: ${SONG_DB_USER}
       SPRING_DATASOURCE_PASSWORD: ${SONG_DB_PASSWORD}
-      EUREKA_SERVER_URL: ${EUREKA_SERVER_URL}
+      SPRING_RABBITMQ_HOST: rabbitmq
+      SPRING_RABBITMQ_PORT: 5672
+      SPRING_RABBITMQ_USERNAME: ${RABBITMQ_USER}
+      SPRING_RABBITMQ_PASSWORD: ${RABBITMQ_PASSWORD}
+      EUREKA_CLIENT_SERVICEURL_DEFAULTZONE: http://eureka-server:8761/eureka
     depends_on:
-      - song-db
-      - eureka-server
+      song-db:
+        condition: service_healthy
+      eureka-server:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "http://localhost:8081/"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+    networks:
+      - microservices-network
 
   resource-service:
     build:
       context: ./resource-service
+      dockerfile: Dockerfile
+    container_name: resource_service
     ports:
       - "${RESOURCE_SERVICE_PORT}:8080"
     environment:
       SERVER_PORT: 8080
-      SPRING_DATASOURCE_URL: ${RESOURCE_DB_URL}
+      SPRING_DATASOURCE_URL: jdbc:postgresql://resource-db:5432/${RESOURCE_DB_NAME}
       SPRING_DATASOURCE_USERNAME: ${RESOURCE_DB_USER}
       SPRING_DATASOURCE_PASSWORD: ${RESOURCE_DB_PASSWORD}
-      EUREKA_SERVER_URL: ${EUREKA_SERVER_URL}
-      SONG_SERVICE_URL: ${SONG_SERVICE_URL}
+      SPRING_RABBITMQ_HOST: rabbitmq
+      SPRING_RABBITMQ_PORT: 5672
+      SPRING_RABBITMQ_USERNAME: ${RABBITMQ_USER}
+      SPRING_RABBITMQ_PASSWORD: ${RABBITMQ_PASSWORD}
+      EUREKA_CLIENT_SERVICEURL_DEFAULTZONE: http://eureka-server:8761/eureka
+      SONG_SERVICE_URL: http://song-service:8081
       AWS_S3_ENDPOINT: http://s3mock:9090
-      RABBITMQ_HOST: rabbitmq
+      AWS_S3_REGION: us-east-1
     depends_on:
-      - resource-db
-      - eureka-server
-      - song-service
-      - s3mock
-      - rabbitmq
-
-  s3mock:
-    image: adobe/s3mock:latest
-    container_name: s3mock
-    ports:
-      - "9090:9090"
-    environment:
-      initialBuckets: resources-bucket
+      resource-db:
+        condition: service_healthy
+      eureka-server:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+      song-service:
+        condition: service_healthy
+      s3mock:
+        condition: service_started
+    healthcheck:
+      test: ["CMD", "curl", "http://localhost:8080"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+    networks:
+      - microservices-network
 
   resource-processor:
     build:
       context: ./resource-processor
+      dockerfile: Dockerfile
+    container_name: resource_processor
     ports:
-      - "8082:8082"
+      - "${RESOURCE_PROCESSOR_PORT}:8082"
     environment:
       SERVER_PORT: 8082
-      RABBITMQ_HOST: rabbitmq
+      SPRING_RABBITMQ_HOST: rabbitmq
+      SPRING_RABBITMQ_PORT: 5672
+      SPRING_RABBITMQ_USERNAME: ${RABBITMQ_USER}
+      SPRING_RABBITMQ_PASSWORD: ${RABBITMQ_PASSWORD}
       RESOURCE_SERVICE_URL: http://resource-service:8080
       SONG_SERVICE_URL: http://song-service:8081
+      EUREKA_CLIENT_SERVICEURL_DEFAULTZONE: http://eureka-server:8761/eureka
     depends_on:
-      - rabbitmq
-      - resource-service
-      - song-service
+      rabbitmq:
+        condition: service_healthy
+      resource-service:
+        condition: service_healthy
+      song-service:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8082/actuator/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+    networks:
+      - microservices-network
+
+volumes:
+  resource_db_data:
+  song_db_data:
+  rabbitmq_data:
+
+networks:
+  microservices-network:
+    driver: bridge
