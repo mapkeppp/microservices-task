@@ -97,4 +97,37 @@ public class SongService {
                 .peek(songRepository::deleteById)
                 .collect(java.util.stream.Collectors.toList());
     }
+
+    public SongDto updateSong(Integer id, SongDto songDTO) {
+        if (id <= 0) {
+            throw new IllegalArgumentException(
+                    "Invalid value '" + id + "' for ID. Must be a positive integer"
+            );
+        }
+
+        Song song = songRepository.findById(id)
+                .orElseThrow(() -> new SongNotFoundException(
+                        "Song metadata for ID=" + id + " not found"
+                ));
+
+        song.setName(songDTO.getName());
+        song.setArtist(songDTO.getArtist());
+        song.setAlbum(songDTO.getAlbum());
+        song.setDuration(songDTO.getDuration());
+        song.setYear(songDTO.getYear());
+
+        return toDto(songRepository.save(song));
+    }
+
+    private SongDto toDto(Song song) {
+        SongDto dto = new SongDto();
+        dto.setId(song.getId());
+        dto.setName(song.getName());
+        dto.setArtist(song.getArtist());
+        dto.setAlbum(song.getAlbum());
+        dto.setDuration(song.getDuration());
+        dto.setYear(song.getYear());
+        return dto;
+    }
+
 }

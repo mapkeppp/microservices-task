@@ -5,10 +5,13 @@ import com.example.resource_service.entity.Resource;
 import com.example.resource_service.exception.ResourceNotFoundException;
 import com.example.resource_service.repository.ResourceRepository;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.amqp.rabbit.core.RabbitTemplate;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 import org.springframework.web.client.RestTemplate;
 import software.amazon.awssdk.core.sync.RequestBody;
 import software.amazon.awssdk.services.s3.S3Client;
@@ -21,6 +24,7 @@ import java.util.List;
 import java.util.UUID;
 import java.util.stream.Collectors;
 
+@Slf4j
 @Service
 @RequiredArgsConstructor
 public class ResourceService {
@@ -49,11 +53,16 @@ public class ResourceService {
         Resource resource = new Resource();
         resource.setS3Key(s3Key);
         resource = resourceRepository.save(resource);
+        Integer resourceId = resource.getId();
 
-        // Отправляем сообщение в очередь
-        rabbitTemplate.convertAndSend(RabbitMQConfig.QUEUE_NAME, resource.getId());
+        TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+            @Override
+            public void afterCommit() {
+                rabbitTemplate.convertAndSend(RabbitMQConfig.QUEUE_NAME, resourceId);
+            }
+        });
 
-        return resource.getId();
+        return resourceId;
     }
 
     public byte[] getResourceById(Integer id) {
@@ -100,32 +109,33 @@ public class ResourceService {
             }
         }
 
-        List<Integer> deletedIds = new ArrayList<>();
-
-        for (Integer id : ids) {
-            resourceRepository.findById(id).ifPresent(resource -> {
-                try {
-                    DeleteObjectRequest deleteObjectRequest = DeleteObjectRequest.builder()
-                            .bucket(bucketName)
-                            .key(resource.getS3Key())
-                            .build();
-                    s3Client.deleteObject(deleteObjectRequest);
-                } catch (Exception ignored) {
-                }
-
-                resourceRepository.deleteById(id);
-                deletedIds.add(id);
-            });
+        List<Resource> found = new ArrayList<>();
+        for (Integer id : ids.stream().distinct().collect(Collectors.toList())) {
+            resourceRepository.findById(id).ifPresent(found::add);
         }
 
-        if (!deletedIds.isEmpty()) {
-            String actuallyDeletedCsv = deletedIds.stream()
-                    .map(String::valueOf)
-                    .collect(Collectors.joining(","));
+        if (found.isEmpty()) {
+            return new ArrayList<>();
+        }
+
+        String csv = found.stream()
+                .map(resource -> String.valueOf(resource.getId()))
+                .collect(Collectors.joining(","));
+        restTemplate.delete(songServiceUrl + "?id=" + csv);
+
+        List<Integer> deletedIds = new ArrayList<>();
+        for (Resource resource : found) {
             try {
-                restTemplate.delete(songServiceUrl + "?id=" + actuallyDeletedCsv);
-            } catch (Exception ignored) {
+                DeleteObjectRequest deleteObjectRequest = DeleteObjectRequest.builder()
+                        .bucket(bucketName)
+                        .key(resource.getS3Key())
+                        .build();
+                s3Client.deleteObject(deleteObjectRequest);
+            } catch (Exception e) {
+                log.warn("Failed to delete S3 object {} for resource {}", resource.getS3Key(), resource.getId(), e);
             }
+            resourceRepository.deleteById(resource.getId());
+            deletedIds.add(resource.getId());
         }
 
         return deletedIds;
