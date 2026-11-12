@@ -157,4 +157,16 @@ class SongServiceUnitTest {
         assertTrue(result.isEmpty());
         verify(songRepository, never()).deleteById(anyInt());
     }
+
+    @Test
+    void shouldUpdateSongSuccessfully() {
+        when(songRepository.findById(1)).thenReturn(Optional.of(testSong));
+        when(songRepository.save(any(Song.class))).thenAnswer(inv -> inv.getArgument(0));
+
+        testSongDto.setName("Bohemian Rhapsody (Remastered)");
+        SongDto result = songService.updateSong(1, testSongDto);
+
+        assertEquals("Bohemian Rhapsody (Remastered)", result.getName());
+        verify(songRepository, times(1)).save(any(Song.class));
+    }
 }

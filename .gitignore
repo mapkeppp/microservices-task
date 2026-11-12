@@ -33,3 +33,7 @@ build/
 .vscode/
 
 .env
+*/target/
+test.mp3
+cp.txt
+.idea/

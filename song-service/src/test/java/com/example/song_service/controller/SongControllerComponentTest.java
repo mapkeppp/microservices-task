@@ -1,13 +1,14 @@
 package com.example.song_service.controller;
 
 import com.example.song_service.dto.SongDto;
+import com.example.song_service.exception.SongAlreadyExistsException;
+import com.example.song_service.exception.SongNotFoundException;
 import com.example.song_service.service.SongService;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
-import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
 import org.springframework.boot.test.mock.mockito.MockBean;
 import org.springframework.http.MediaType;
 import org.springframework.test.web.servlet.MockMvc;
@@ -15,13 +16,13 @@ import org.springframework.test.web.servlet.MockMvc;
 import java.util.Arrays;
 import java.util.Collections;
 
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.*;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
-import static org.mockito.Mockito.*;
-import static org.mockito.ArgumentMatchers.any;
 
-@SpringBootTest
-@AutoConfigureMockMvc
+@WebMvcTest(SongController.class)
 class SongControllerComponentTest {
 
     @Autowired
@@ -47,14 +48,25 @@ class SongControllerComponentTest {
     }
 
     @Test
-    void shouldCreateSongAndReturn200() throws Exception {
+    void shouldCreateSongAndReturn201() throws Exception {
         when(songService.createSong(any(SongDto.class))).thenReturn(1);
 
         mockMvc.perform(post("/songs")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(testSongDto)))
-                .andExpect(status().isOk())
+                .andExpect(status().isCreated())
                 .andExpect(jsonPath("$.id").value(1));
+    }
+
+    @Test
+    void shouldReturn409WhenSongAlreadyExists() throws Exception {
+        when(songService.createSong(any(SongDto.class)))
+                .thenThrow(new SongAlreadyExistsException("exists"));
+
+        mockMvc.perform(post("/songs")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(testSongDto)))
+                .andExpect(status().isConflict());
     }
 
     @Test
@@ -68,14 +80,55 @@ class SongControllerComponentTest {
     }
 
     @Test
-    void shouldDeleteSongsAndReturn200() throws Exception {
+    void shouldReturn404WhenSongNotFound() throws Exception {
+        when(songService.getSongById(999)).thenThrow(new SongNotFoundException("not found"));
+
+        mockMvc.perform(get("/songs/999"))
+                .andExpect(status().isNotFound());
+    }
+
+    @Test
+    void shouldUpdateSongAndReturn200() throws Exception {
+        when(songService.updateSong(eq(1), any(SongDto.class))).thenReturn(testSongDto);
+
+        mockMvc.perform(put("/songs/1")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(testSongDto)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.name").value("Test Song"));
+    }
+
+    @Test
+    void shouldReturn404WhenUpdatingMissingSong() throws Exception {
+        when(songService.updateSong(eq(999), any(SongDto.class)))
+                .thenThrow(new SongNotFoundException("not found"));
+
+        mockMvc.perform(put("/songs/999")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(testSongDto)))
+                .andExpect(status().isNotFound());
+    }
+
+    @Test
+    void shouldDeleteSongsAndReturn204() throws Exception {
         when(songService.deleteSongs("1,2,3")).thenReturn(Arrays.asList(1, 2, 3));
 
-        mockMvc.perform(delete("/songs?id=1,2,3"))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.ids[0]").value(1))
-                .andExpect(jsonPath("$.ids[1]").value(2))
-                .andExpect(jsonPath("$.ids[2]").value(3));
+        mockMvc.perform(delete("/songs").param("id", "1,2,3"))
+                .andExpect(status().isNoContent());
+    }
+
+    @Test
+    void shouldDeleteSongsWithEmptyParamsAndReturn204() throws Exception {
+        when(songService.deleteSongs("")).thenReturn(Collections.emptyList());
+
+        mockMvc.perform(delete("/songs").param("id", ""))
+                .andExpect(status().isNoContent());
+    }
+
+    @Test
+    void shouldReturn400WhenDeleteParamIsMissing() throws Exception {
+        mockMvc.perform(delete("/songs"))
+                .andExpect(status().isBadRequest());
     }
 
     @Test
@@ -100,13 +153,5 @@ class SongControllerComponentTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(invalidSong)))
                 .andExpect(status().isBadRequest());
-    }
-
-    @Test
-    void shouldDeleteSongsWithEmptyParams() throws Exception {
-        when(songService.deleteSongs("")).thenReturn(Collections.emptyList());
-
-        mockMvc.perform(delete("/songs?id="))
-                .andExpect(status().isOk());
     }
 }
