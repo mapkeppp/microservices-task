@@ -1,4 +1,4 @@
-FROM amazoncorretto:21-alpine
+﻿FROM amazoncorretto:21-alpine
 WORKDIR /app
 RUN apk add --no-cache curl
 COPY target/*.jar app.jar

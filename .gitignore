@@ -33,3 +33,6 @@ build/
 .vscode/
 
 .env
+
+out/
+e2e-tests/target/
