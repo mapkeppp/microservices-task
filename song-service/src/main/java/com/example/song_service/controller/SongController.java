@@ -2,7 +2,7 @@ package com.example.song_service.controller;
 
 import com.example.song_service.dto.SongDto;
 import com.example.song_service.service.SongService;
-import jakarta.validation.Valid;
+import javax.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
