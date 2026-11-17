@@ -1,19 +1,26 @@
-FROM maven:3.9-eclipse-temurin-17-alpine AS build
+# syntax=docker/dockerfile:1
 
+# ---------- Build stage ----------
+FROM maven:3.9-eclipse-temurin-17 AS build
 WORKDIR /app
 
-COPY pom.xml ./
-RUN mvn dependency:go-offline
+# Dependency layer: rebuilt only when pom.xml changes
+COPY pom.xml .
+RUN --mount=type=cache,target=/root/.m2 mvn -B dependency:go-offline
 
 COPY src ./src
-RUN mvn clean package -Dmaven.test.skip=true
+RUN --mount=type=cache,target=/root/.m2 mvn -B clean package -DskipTests
 
+# ---------- Runtime stage ----------
 FROM eclipse-temurin:17-jre-alpine
-
 WORKDIR /app
 
+ARG SERVER_PORT=8081
+ENV SERVER_PORT=${SERVER_PORT}
+
+RUN addgroup -S app && adduser -S app -G app
 COPY --from=build /app/target/*.jar app.jar
+USER app
 
-EXPOSE 8081
-
+EXPOSE ${SERVER_PORT}
 CMD ["java", "-jar", "app.jar"]

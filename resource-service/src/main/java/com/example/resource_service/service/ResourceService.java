@@ -15,12 +15,14 @@ import software.amazon.awssdk.services.s3.S3Client;
 import software.amazon.awssdk.services.s3.model.DeleteObjectRequest;
 import software.amazon.awssdk.services.s3.model.GetObjectRequest;
 import software.amazon.awssdk.services.s3.model.PutObjectRequest;
+import lombok.extern.slf4j.Slf4j;
 
 import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
 import java.util.stream.Collectors;
 
+@Slf4j
 @Service
 @RequiredArgsConstructor
 public class ResourceService {
@@ -100,32 +102,33 @@ public class ResourceService {
             }
         }
 
-        List<Integer> deletedIds = new ArrayList<>();
-
-        for (Integer id : ids) {
-            resourceRepository.findById(id).ifPresent(resource -> {
-                try {
-                    DeleteObjectRequest deleteObjectRequest = DeleteObjectRequest.builder()
-                            .bucket(bucketName)
-                            .key(resource.getS3Key())
-                            .build();
-                    s3Client.deleteObject(deleteObjectRequest);
-                } catch (Exception ignored) {
-                }
-
-                resourceRepository.deleteById(id);
-                deletedIds.add(id);
-            });
+        List<Resource> found = new ArrayList<>();
+        for (Integer id : ids.stream().distinct().collect(Collectors.toList())) {
+            resourceRepository.findById(id).ifPresent(found::add);
         }
 
-        if (!deletedIds.isEmpty()) {
-            String actuallyDeletedCsv = deletedIds.stream()
-                    .map(String::valueOf)
-                    .collect(Collectors.joining(","));
+        if (found.isEmpty()) {
+            return new ArrayList<>();
+        }
+
+        String csv = found.stream()
+                .map(resource -> String.valueOf(resource.getId()))
+                .collect(Collectors.joining(","));
+        restTemplate.delete(songServiceUrl + "?id=" + csv);
+
+        List<Integer> deletedIds = new ArrayList<>();
+        for (Resource resource : found) {
             try {
-                restTemplate.delete(songServiceUrl + "?id=" + actuallyDeletedCsv);
-            } catch (Exception ignored) {
+                DeleteObjectRequest deleteObjectRequest = DeleteObjectRequest.builder()
+                        .bucket(bucketName)
+                        .key(resource.getS3Key())
+                        .build();
+                s3Client.deleteObject(deleteObjectRequest);
+            } catch (Exception e) {
+                log.warn("Failed to delete S3 object {} for resource {}", resource.getS3Key(), resource.getId(), e);
             }
+            resourceRepository.deleteById(resource.getId());
+            deletedIds.add(resource.getId());
         }
 
         return deletedIds;
